@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Data Display</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 10px;
+        }
+        .chart-container {
+            width: 50%;
+            height: 400px;
+            box-sizing: border-box;
+        }
+        .chart-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>数据显示</h1>
+    <div id="dataDisplay">等待数据...</div>
+
+    <!-- Chart row containers -->
+    <div class="chart-row">
+        <div class="chart-container" id="chartTemp"></div>
+        <div class="chart-container" id="chartHumidity"></div>
+    </div>
+    <div class="chart-row">
+        <div class="chart-container" id="chartLight"></div>
+        <div class="chart-container" id="chartWater"></div>
+    </div>
+
+    <!-- Include the ApexCharts library -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <!-- Include the MQTT.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
+
+    <script>
+    
+        const tempDataPoints = [];
+        const humidityDataPoints = [];
+        const lightDataPoints = [];
+        const waterDataPoints = [];
+
+        const maxPoints = 50;
+
+        // Chart options for each data type
+        const tempOptions = {
+            chart: {
+                type: 'line',
+                height: 400,
+            },
+            series: [{
+                name: 'DHT11_T',
+                data: tempDataPoints
+            }],
+            xaxis: {
+                type: 'datetime',
+                title: {
+                    text: 'Time'
+                }
+            },
+            yaxis: {
+                title: {
+                    text: 'DHT11_T'
+                }
+            }
+        };
+
+        const humidityOptions = {
+            chart: {
+                type: 'line',
+                height: 400,
+            },
+            series: [{
+                name: 'DHT11_H',
+                data: humidityDataPoints
+            }],
+            xaxis: {
+                type: 'datetime',
+                title: {
+                    text: 'Time'
+                }
+            },
+            yaxis: {
+                title: {
+                    text: 'DHT11_H'
+                }
+            }
+        };
+
+        const lightOptions = {
+            chart: {
+                type: 'line',
+                height: 400,
+            },
+            series: [{
+                name: 'Light',
+                data: lightDataPoints
+            }],
+            xaxis: {
+                type: 'datetime',
+                title: {
+                    text: 'Time'
+                }
+            },
+            yaxis: {
+                title: {
+                    text: 'Light'
+                }
+            }
+        };
+
+        const waterOptions = {
+            chart: {
+                type: 'line',
+                height: 400,
+            },
+            series: [{
+                name: 'Water',
+                data: waterDataPoints
+            }],
+            xaxis: {
+                type: 'datetime',
+                title: {
+                    text: 'Time'
+                }
+            },
+            yaxis: {
+                title: {
+                    text: 'Water'
+                }
+            }
+        };
+
+        // Initialize charts
+        const tempChart = new ApexCharts(document.querySelector("#chartTemp"), tempOptions);
+        const humidityChart = new ApexCharts(document.querySelector("#chartHumidity"), humidityOptions);
+        const lightChart = new ApexCharts(document.querySelector("#chartLight"), lightOptions);
+        const waterChart = new ApexCharts(document.querySelector("#chartWater"), waterOptions);
+
+        tempChart.render();
+        humidityChart.render();
+        lightChart.render();
+        waterChart.render();
+
+        // Connect to the MQTT broker
+        const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+        client.on('connect', () => {
+            console.log('Connected to MQTT broker');
+            client.subscribe('date/pub', (err) => {
+                if (err) {
+                    console.error('Subscription error:', err);
+                }
+            });
+        });
+
+        client.on('message', (topic, message) => {
+            const messageString = message.toString().trim();
+            console.log('Received message:', messageString);
+
+            try {
+                // Parse JSON data
+                const data = JSON.parse(messageString);
+
+                // Update the data display area
+                const dataDisplay = document.getElementById('dataDisplay');
+                dataDisplay.innerHTML = `
+                    <div><strong>DHT11_T:</strong> ${data.DHT11_T}</div>
+                    <div><strong>DHT11_H:</strong> ${data.DHT11_H}</div>
+                    <div><strong>Light:</strong> ${data.light}</div>
+                    <div><strong>Water:</strong> ${data.water}</div>
+                `;
+
+                // Add new data points and update the charts
+                const timestamp = new Date().getTime();
+
+                tempDataPoints.push({ x: timestamp, y: data.DHT11_T });
+                if (tempDataPoints.length > maxPoints) {
+                    tempDataPoints.shift();
+                }
+                tempChart.updateSeries([{ data: tempDataPoints }]);
+
+                humidityDataPoints.push({ x: timestamp, y: data.DHT11_H });
+                if (humidityDataPoints.length > maxPoints) {
+                    humidityDataPoints.shift();
+                }
+                humidityChart.updateSeries([{ data: humidityDataPoints }]);
+
+                lightDataPoints.push({ x: timestamp, y: data.light });
+                if (lightDataPoints.length > maxPoints) {
+                    lightDataPoints.shift();
+                }
+                lightChart.updateSeries([{ data: lightDataPoints }]);
+
+                waterDataPoints.push({ x: timestamp, y: data.water });
+                if (waterDataPoints.length > maxPoints) {
+                    waterDataPoints.shift();
+                }
+                waterChart.updateSeries([{ data: waterDataPoints }]);
+
+            } catch (error) {
+                console.error('Failed to parse message:', error);
+                document.getElementById('dataDisplay').textContent = '数据解析失败';
+            }
+        });
+
+        client.on('error', (err) => {
+            console.error('MQTT client error:', err);
+        });
+    </script>
+</body>
+</html>
